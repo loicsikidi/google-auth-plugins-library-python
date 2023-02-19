@@ -1,0 +1,23 @@
+env/
+pip-wheel-metadata/
+*.egg-info/
+__pycache__/
+.coverage*
+html/
+dist/
+.python-version
+build
+
+# Ignore some file types that may litter the root directory
+*.txt
+*.crt
+*.sig
+*.pem
+*.sh
+*.pub
+
+# Ignore some folders
+.vscode/*
+
+# Don't ignore these files when we intend to include them
+!tests/data/*
