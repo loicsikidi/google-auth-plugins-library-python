@@ -1,12 +1,12 @@
 import datetime
 import json
 import os
+from http import client as http_client
 from unittest import mock
 
 import pytest  # type: ignore
 from google.auth import _helpers, crypt, exceptions, transport
 from google.oauth2 import credentials, service_account
-from six.moves import http_client
 
 from google_auth_plugins import dwd_credentials
 from google_auth_plugins.dwd_credentials import Credentials
@@ -34,6 +34,7 @@ with open(SERVICE_ACCOUNT_JSON_FILE, "rb") as fh:
 SIGNER = crypt.RSASigner.from_string(PRIVATE_KEY_BYTES, "1")
 TOKEN_URI = "https://example.com/oauth2/token"
 
+
 class RequestMockResponse:
     def __init__(self, json_data, status_code):
         self.data = json.dumps(json_data)
@@ -41,7 +42,8 @@ class RequestMockResponse:
 
     def __call__(self, **kwargs):
         return self
-        
+
+
 class MockResponse:
     def __init__(self, json_data, status_code):
         self.json_data = json_data
@@ -49,6 +51,7 @@ class MockResponse:
 
     def json(self):
         return self.json_data
+
 
 @pytest.fixture
 def mock_donor_credentials():
@@ -60,14 +63,18 @@ def mock_donor_credentials():
         )
         yield grant
 
+
 @pytest.fixture
 def mock_request_sign():
     with mock.patch(
         "google.auth.transport.requests.Request", autospec=True
     ) as auth_session:
-        data = {"signedJwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}
+        data = {
+            "signedJwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+        }
         auth_session.return_value = RequestMockResponse(data, http_client.OK)
         yield auth_session
+
 
 @pytest.fixture
 def mock_authorizedsession_sign():
@@ -78,8 +85,8 @@ def mock_authorizedsession_sign():
         auth_session.return_value = MockResponse(data, http_client.OK)
         yield auth_session
 
-class TestDwdCredentials(object):
 
+class TestDwdCredentials(object):
     SERVICE_ACCOUNT_EMAIL = "service-account@example.com"
     TARGET_PRINCIPAL = "dwd@project.iam.gserviceaccount.com"
     TARGET_SCOPES = ["https://www.googleapis.com/auth/admin.directory.group.readonly"]
@@ -101,9 +108,8 @@ class TestDwdCredentials(object):
         source_credentials=SOURCE_CREDENTIALS,
         subject=SUBJECT,
         target_principal=TARGET_PRINCIPAL,
-        iam_sign_endpoint_override=None
+        iam_sign_endpoint_override=None,
     ):
-
         return Credentials(
             source_credentials=source_credentials,
             subject=subject,
@@ -145,7 +151,9 @@ class TestDwdCredentials(object):
         return request
 
     @pytest.mark.parametrize("use_data_bytes", [True, False])
-    def test_refresh_success(self, use_data_bytes, mock_donor_credentials, mock_request_sign):
+    def test_refresh_success(
+        self, use_data_bytes, mock_donor_credentials, mock_request_sign
+    ):
         credentials = self.make_credentials()
         token = "token"
         expires_in = 500
@@ -164,7 +172,9 @@ class TestDwdCredentials(object):
 
     @pytest.mark.parametrize("use_data_bytes", [True, False])
     def test_refresh_success_iam_sign_endpoint_override(
-        self, use_data_bytes, mock_donor_credentials,
+        self,
+        use_data_bytes,
+        mock_donor_credentials,
     ):
         credentials = self.make_credentials(
             iam_sign_endpoint_override=self.IAM_SIGN_ENDPOINT_OVERRIDE
@@ -177,8 +187,12 @@ class TestDwdCredentials(object):
         with mock.patch(
             "google.auth.transport.requests.Request", autospec=True
         ) as auth_session:
-            data = {"signedJwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}
-            mock_response = mock.Mock(return_value=RequestMockResponse(data, http_client.OK))
+            data = {
+                "signedJwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+            }
+            mock_response = mock.Mock(
+                return_value=RequestMockResponse(data, http_client.OK)
+            )
             auth_session.return_value = mock_response
 
             request = self.make_request(
@@ -195,7 +209,6 @@ class TestDwdCredentials(object):
             # Confirm override endpoint used.
             mock_response_kwargs = mock_response.call_args[1]
             assert mock_response_kwargs["url"] == self.IAM_SIGN_ENDPOINT_OVERRIDE
-
 
     @pytest.mark.parametrize("time_skew", [100, -100])
     def test_refresh_source_credentials(self, time_skew, mock_request_sign):
@@ -233,7 +246,9 @@ class TestDwdCredentials(object):
             else:
                 source_cred_refresh.assert_called_once()
 
-    def test_refresh_failure_malformed_expire_time(self, mock_donor_credentials, mock_request_sign):
+    def test_refresh_failure_malformed_expire_time(
+        self, mock_donor_credentials, mock_request_sign
+    ):
         credentials = self.make_credentials()
         token = "token"
 
@@ -252,7 +267,9 @@ class TestDwdCredentials(object):
         assert not credentials.valid
         assert credentials.expired
 
-    def test_refresh_failure_unauthorzed(self, mock_donor_credentials, mock_request_sign):
+    def test_refresh_failure_unauthorzed(
+        self, mock_donor_credentials, mock_request_sign
+    ):
         credentials = self.make_credentials()
 
         response_body = {
@@ -275,7 +292,9 @@ class TestDwdCredentials(object):
         assert not credentials.valid
         assert credentials.expired
 
-    def test_refresh_failure_http_error(self, mock_donor_credentials, mock_request_sign):
+    def test_refresh_failure_http_error(
+        self, mock_donor_credentials, mock_request_sign
+    ):
         credentials = self.make_credentials()
 
         response_body = {}
@@ -292,10 +311,14 @@ class TestDwdCredentials(object):
         assert not credentials.valid
         assert credentials.expired
 
-    def test_refresh_failure_unable_to_sign_impersonated_token(self, mock_donor_credentials):
+    def test_refresh_failure_unable_to_sign_impersonated_token(
+        self, mock_donor_credentials
+    ):
         credentials = self.make_credentials()
 
-        with mock.patch("google.auth.transport.requests.Request", autospec=True) as auth_session:
+        with mock.patch(
+            "google.auth.transport.requests.Request", autospec=True
+        ) as auth_session:
             data = {"error": {"code": 403, "message": "unauthorized"}}
             auth_session.return_value = RequestMockResponse(data, http_client.FORBIDDEN)
 
@@ -323,18 +346,23 @@ class TestDwdCredentials(object):
     def test__target_prinpal(self, target_principal):
         credentials = self.make_credentials(target_principal=target_principal)
         if target_principal is None:
-            assert credentials._target_principal == credentials._source_credentials.service_account_email
+            assert (
+                credentials._target_principal
+                == credentials._source_credentials.service_account_email
+            )
         else:
             assert credentials._target_principal == target_principal
 
     def test__target_prinpal_failure(self):
         with pytest.raises(ValueError):
-            source_credentials = service_account.Credentials(
-                SIGNER, None, TOKEN_URI
+            source_credentials = service_account.Credentials(SIGNER, None, TOKEN_URI)
+            self.make_credentials(
+                target_principal=None, source_credentials=source_credentials
             )
-            self.make_credentials(target_principal=None, source_credentials=source_credentials)
 
-    def test_sign_bytes(self, mock_donor_credentials, mock_authorizedsession_sign, mock_request_sign):
+    def test_sign_bytes(
+        self, mock_donor_credentials, mock_authorizedsession_sign, mock_request_sign
+    ):
         credentials = self.make_credentials()
         token = "token"
         expires_in = 500
@@ -391,6 +419,53 @@ class TestDwdCredentials(object):
         assert quota_project_creds._quota_project_id == "project-foo"
         assert quota_project_creds.valid
         assert not quota_project_creds.expired
+
+    def test_with_subject_reset_context(
+        self, mock_donor_credentials, mock_request_sign
+    ):
+        credentials = self.make_credentials()
+
+        token = "token"
+        expires_in = 500
+        response_body = {"access_token": token, "expires_in": expires_in}
+
+        request = self.make_request(
+            data=json.dumps(response_body),
+            status=http_client.OK,
+        )
+
+        credentials.refresh(request)
+
+        new_subject = "another.person@example.com"
+        new_creds = credentials.with_subject(subject=new_subject)
+
+        assert not new_creds.valid
+        assert new_creds.expired
+        assert new_creds._subject == new_subject
+
+    @pytest.mark.parametrize("use_data_bytes", [True, False])
+    def test_with_subject(
+        self, use_data_bytes, mock_donor_credentials, mock_request_sign
+    ):
+        new_subject = "another.person@example.com"
+        credentials = self.make_credentials()
+        second_delegated_creds = credentials.with_subject(new_subject)
+
+        token = "token"
+        expires_in = 500
+        response_body = {"access_token": token, "expires_in": expires_in}
+
+        request = self.make_request(
+            data=json.dumps(response_body),
+            status=http_client.OK,
+            use_data_bytes=use_data_bytes,
+        )
+
+        second_delegated_creds.refresh(request)
+
+        assert second_delegated_creds.valid
+        assert not second_delegated_creds.expired
+        assert second_delegated_creds._subject == new_subject
 
     def test_with_scopes(self):
         credentials = self.make_credentials()

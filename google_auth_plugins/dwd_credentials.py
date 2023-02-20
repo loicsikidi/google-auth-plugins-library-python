@@ -1,15 +1,38 @@
-import datetime
-import json
+"""Google Cloud domain-wide delegation Impersonated credentials.
 
-import six
+Domain-wide delegation
+----------------------
+
+Domain-wide delegation allows a service account to access user data on
+behalf of any user in a Google Apps domain without consent from the user.
+For example, an application that uses the Google Calendar API to add events to
+the calendars of all users in a Google Apps domain would use a service account
+to access the Google Calendar API on behalf of users.
+
+This module provides authentication for applications where local credentials
+impersonates a remote a domain-wide delagation service account using `IAM Credentials API`_.
+   
+This class can be used to impersonate a service account as long as the original
+Credential object has the "Service Account Token Creator" role on the target
+service account.
+
+    .. _IAM Credentials API:
+        https://cloud.google.com/iam/credentials/reference/rest/
+
+This approach is more secure than using a service account key (long-term credential).
+"""
+import json
+from datetime import datetime, timedelta
+from http import client as http_client
+from typing import Any, Dict, Mapping, Optional, Tuple
+
 from google.auth import _helpers, credentials, exceptions
-from google.auth.impersonated_credentials import \
-    Credentials as ImpersonatedCredentials
-from six.moves import http_client
+from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
+from google.auth.transport.requests import Request
 
 _DEFAULT_TOKEN_LIFETIME_SECS = 3600  # 1 hour in seconds
-_DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"
-_TOKEN_OAUTH_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+_DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"  # nosec: B105
+_TOKEN_OAUTH_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer"  # nosec: B105
 _DWD_ERROR = "Unable to acquire domain-wide delegation credentials"
 _DWD_SIGN_ERROR = "Unable to sign domain-wide delegation token grant"
 _IAM_SIGN_ENDPOINT = (
@@ -17,10 +40,14 @@ _IAM_SIGN_ENDPOINT = (
     + "/serviceAccounts/{}:signJwt"
 )
 
+
 def _make_iam_sign_request(
-    principal,headers, body, iam_sign_endpoint_override=None
-):
-    """Makes a request to the Google Cloud IAM service to a sign 
+    principal: str,
+    headers: Mapping[str, str],
+    body: Mapping[str, str],
+    iam_sign_endpoint_override: Optional[str] = None,
+) -> str:
+    """Makes a request to the Google Cloud IAM service to a sign
        an OAuth 2.0 assertion.
 
     Args:
@@ -59,14 +86,18 @@ def _make_iam_sign_request(
 
     if response.status != http_client.OK:
         raise exceptions.TransportError(
-            "{}: Error calling signJwt endpoint: {}".format(_DWD_SIGN_ERROR, response_body)
+            "{}: Error calling signJwt endpoint: {}".format(
+                _DWD_SIGN_ERROR, response_body
+            )
         )
-    
-    jwt_response = json.loads(response_body)
+
+    jwt_response: Dict[str, str] = json.loads(response_body)
     return jwt_response["signedJwt"]
 
 
-def _make_token_request(request, headers, body):
+def _make_token_request(
+    request: Request, headers: Mapping[str, str], body: Mapping[str, str]
+) -> Tuple[str, datetime]:
     """Makes a request to the OAuth 2.0 token endpoint for an access token.
     Args:
         request (Request): The Request object to use.
@@ -79,6 +110,9 @@ def _make_token_request(request, headers, body):
             credentials are not available.  Common reasons are
             `domain-wide delegation` is not setup or the
             `targeted_scopes` are not allowed
+
+    Returns:
+        Tuple[str, datetime]:  Requested access token and its expiry timestamp
     """
     token_uri = _DEFAULT_TOKEN_URI
 
@@ -97,36 +131,24 @@ def _make_token_request(request, headers, body):
     try:
         token_response = json.loads(response_body)
         token = token_response["access_token"]
-        
-        lifetime = datetime.timedelta(seconds=token_response["expires_in"])
+
+        lifetime = timedelta(seconds=token_response["expires_in"])
         expiry = _helpers.utcnow() + lifetime
 
         return token, expiry
 
     except (KeyError, ValueError, TypeError) as caught_exc:
         new_exc = exceptions.RefreshError(
-            "{}: No access token or invalid expiration in response.".format(
-              _DWD_ERROR
-            ),
+            "{}: No access token or invalid expiration in response.".format(_DWD_ERROR),
             response_body,
         )
-        six.raise_from(new_exc, caught_exc)
+        raise new_exc from caught_exc
 
 
 class Credentials(ImpersonatedCredentials):
     """This module defines Domain-wide delegation credentials produced via an
     impersonated workflow. This allow to obtain DWD credentials without requiring
     a service account key.
-
-    Domain-wide delegation
-    ----------------------
-
-    Domain-wide delegation allows a service account to access user data on
-    behalf of any user in a Google Apps domain without consent from the user.
-    For example, an application that uses the Google Calendar API to add events to
-    the calendars of all users in a Google Apps domain would use a service account
-    to access the Google Calendar API on behalf of users.
-
 
     The target service account must
     1) have domain-wide delegation enabled
@@ -149,7 +171,7 @@ class Credentials(ImpersonatedCredentials):
     role on the target account to impersonate.  In this example, the
     identity (a user or a service account) represented by source_credentials has the
     token creator role on
-    `dwd-impersonated-account@_project_.iam.gserviceaccount.com` 
+    `dwd-impersonated-account@_project_.iam.gserviceaccount.com`
     and wants to act on behald of 'john.doe@pamplemousse.com'.
 
     Enable the IAMCredentials API on the source project:
@@ -184,7 +206,7 @@ class Credentials(ImpersonatedCredentials):
             service = build('calendar', 'v3', credentials=delegated_credentials)
 
             # Call the Calendar API
-            now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
+            now = utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
             print('Getting the upcoming 10 events')
             events_result = service.events().list(calendarId='primary', timeMin=now,
                                                 maxResults=10, singleEvents=True,
@@ -201,9 +223,9 @@ class Credentials(ImpersonatedCredentials):
                 print(start, event['summary'])
         except HttpError as error:
             print('An error occurred: %s' % error)
-        """ 
-        
-    def __init__(
+    """
+
+    def __init__(  # type: ignore[no-untyped-def]
         self,
         source_credentials,
         subject,
@@ -244,24 +266,28 @@ class Credentials(ImpersonatedCredentials):
         Raises:
             ValueError: Raised if target_principal hasn't been found.
         """
-        dwd_principal = target_principal or (source_credentials.service_account_email if hasattr(source_credentials, "service_account_email") else None)
+        dwd_principal = target_principal or (
+            source_credentials.service_account_email
+            if hasattr(source_credentials, "service_account_email")
+            else None
+        )
         super().__init__(
             source_credentials=source_credentials,
             target_principal=dwd_principal,
             target_scopes=target_scopes,
             delegates=delegates,
             quota_project_id=quota_project_id,
-        )    
+        )
         self._subject = subject
         self._iam_sign_endpoint_override = iam_sign_endpoint_override
-        
+
         if self._target_principal is None:
             raise ValueError(
                 "target_principal must be defined as an argument or comes from source_credentials"
             )
 
     @_helpers.copy_docstring(credentials.Credentials)
-    def refresh(self, request):
+    def refresh(self, request):  # type: ignore[no-untyped-def]
         if not self._source_credentials.valid:
             self._source_credentials.refresh(request)
 
@@ -282,10 +308,7 @@ class Credentials(ImpersonatedCredentials):
             iam_sign_endpoint_override=self._iam_sign_endpoint_override,
         )
 
-        body = {
-            "grant_type": _TOKEN_OAUTH_GRANT,
-            "assertion": signed_jwt
-        }
+        body = {"grant_type": _TOKEN_OAUTH_GRANT, "assertion": signed_jwt}
 
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
@@ -295,7 +318,7 @@ class Credentials(ImpersonatedCredentials):
             body=body,
         )
 
-    def _get_assertion_payload(self):
+    def _get_assertion_payload(self) -> Dict[str, Any]:
         """Create an the OAuth 2.0 assertion payload.
 
         Once the assertion will be converted to JWT, it will used during the OAuth 2.0 grant to acquire an
@@ -304,7 +327,7 @@ class Credentials(ImpersonatedCredentials):
         Returns:
             dict: The authorization grant assertion payload.
         """
-        lifetime = datetime.timedelta(seconds=_DEFAULT_TOKEN_LIFETIME_SECS)
+        lifetime = timedelta(seconds=_DEFAULT_TOKEN_LIFETIME_SECS)
         now = _helpers.utcnow()
         expiry = now + lifetime
 
@@ -314,13 +337,13 @@ class Credentials(ImpersonatedCredentials):
             "iss": self._target_principal,
             "aud": _DEFAULT_TOKEN_URI,
             "sub": self._subject,
-            "scope": " ".join(self._target_scopes)
+            "scope": " ".join(self._target_scopes),
         }
 
         return payload
-    
+
     @_helpers.copy_docstring(credentials.CredentialsWithQuotaProject)
-    def with_quota_project(self, quota_project_id):
+    def with_quota_project(self, quota_project_id):  # type: ignore[no-untyped-def]
         return self.__class__(
             self._source_credentials,
             subject=self._subject,
@@ -330,14 +353,35 @@ class Credentials(ImpersonatedCredentials):
             quota_project_id=quota_project_id,
             iam_sign_endpoint_override=self._iam_sign_endpoint_override,
         )
-    
+
+    # mypy: disallow-untyped-defs
     @_helpers.copy_docstring(credentials.Scoped)
-    def with_scopes(self, scopes, default_scopes=None):
+    def with_scopes(self, scopes, default_scopes=None):  # type: ignore[no-untyped-def]
         return self.__class__(
             self._source_credentials,
             subject=self._subject,
             target_principal=self._target_principal,
             target_scopes=scopes or default_scopes,
+            delegates=self._delegates,
+            quota_project_id=self._quota_project_id,
+            iam_sign_endpoint_override=self._iam_sign_endpoint_override,
+        )
+
+    def with_subject(self, subject: str):  # type: ignore[no-untyped-def]
+        """Create a copy of these credentials with the specified subject.
+
+        Args:
+            subject (str): The subject claim.
+
+        Returns:
+            google_auth_plugins.dwd_credentials.Credentials: A new credentials
+                instance.
+        """
+        return self.__class__(
+            self._source_credentials,
+            subject=subject,
+            target_principal=self._target_principal,
+            target_scopes=self._target_scopes,
             delegates=self._delegates,
             quota_project_id=self._quota_project_id,
             iam_sign_endpoint_override=self._iam_sign_endpoint_override,

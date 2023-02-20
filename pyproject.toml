@@ -57,16 +57,15 @@ dev = [
 multi_line_output = 3
 known_first_party = "google-auth-plugins"
 include_trailing_comma = true
+profile = "black"
 
 [tool.interrogate]
 # don't enforce documentation coverage for packaging, testing, the virtual
-# environment, or the CLI (which is documented separately).
+# environment
 exclude = ["env", "test"]
-ignore-semiprivate = true
 ignore-private = true
-# Ignore nested classes for docstring coverage because we use them primarily
-# for pydantic model configuration.
-ignore-nested-classes = true
+# FIXME currently overridden. see https://github.com/econchick/interrogate/issues/12
+ignore-regex = ["^(refresh|with_quota_project|with_scopes)"]
 fail-under = 100
 
 [tool.coverage.run]
@@ -102,7 +101,6 @@ warn_return_any = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
-plugins = ["pydantic.mypy"]
 
 [tool.bandit]
 exclude_dirs = ["./tests"]
