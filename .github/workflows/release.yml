@@ -38,7 +38,7 @@ jobs:
           if-no-files-found: warn
 
   release-pypi:
-    needs: [build, generate-provenance]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -53,7 +53,7 @@ jobs:
           packages_dir: built-packages/
 
   release-github:
-    needs: [build, generate-provenance]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       # Needed to upload release assets.
