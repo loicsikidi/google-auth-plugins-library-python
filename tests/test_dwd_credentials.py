@@ -208,7 +208,7 @@ class TestDwdCredentials(object):
         assert not credentials.expired
 
         # Confirm override endpoint used.
-        mock_response_kwargs = request.call_args_list[0].kwargs
+        mock_response_kwargs = request.call_args_list[0][1]
         assert mock_response_kwargs["url"] == self.IAM_SIGN_ENDPOINT_OVERRIDE
 
     @pytest.mark.parametrize("time_skew", [100, -100])
