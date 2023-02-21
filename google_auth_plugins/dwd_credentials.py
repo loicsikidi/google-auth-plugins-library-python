@@ -22,17 +22,17 @@ service account.
 This approach is more secure than using a service account key (long-term credential).
 """
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 from http import client as http_client
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional
 
 from google.auth import _helpers, credentials, exceptions
 from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from google.auth.transport.requests import Request
+from google.oauth2 import _client
 
 _DEFAULT_TOKEN_LIFETIME_SECS = 3600  # 1 hour in seconds
 _DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"  # nosec: B105
-_TOKEN_OAUTH_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer"  # nosec: B105
 _DWD_ERROR = "Unable to acquire domain-wide delegation credentials"
 _DWD_SIGN_ERROR = "Unable to sign domain-wide delegation token grant"
 _IAM_SIGN_ENDPOINT = (
@@ -42,6 +42,7 @@ _IAM_SIGN_ENDPOINT = (
 
 
 def _make_iam_sign_request(
+    request: Request,
     principal: str,
     headers: Mapping[str, str],
     body: Mapping[str, str],
@@ -51,6 +52,8 @@ def _make_iam_sign_request(
        an OAuth 2.0 assertion.
 
     Args:
+        request (google.auth.transport.requests.Request): Request object
+            to use for sign the assertion.
         principal (str): The principal to request an access token for.
         headers (Mapping[str, str]): Map of headers to transmit.
         body (Mapping[str, str]): JSON Payload body for the iamcredentials
@@ -68,13 +71,10 @@ def _make_iam_sign_request(
     Returns:
         str:  Requested OAuth 2.0 assertion
     """
-    from google.auth.transport.requests import Request
-
     iam_endpoint = iam_sign_endpoint_override or _IAM_SIGN_ENDPOINT.format(principal)
 
     body = json.dumps(body).encode("utf-8")
 
-    request = Request()
     response = request(url=iam_endpoint, method="POST", headers=headers, body=body)
 
     # support both string and bytes type response.data
@@ -93,56 +93,6 @@ def _make_iam_sign_request(
 
     jwt_response: Dict[str, str] = json.loads(response_body)
     return jwt_response["signedJwt"]
-
-
-def _make_token_request(
-    request: Request, headers: Mapping[str, str], body: Mapping[str, str]
-) -> Tuple[str, datetime]:
-    """Makes a request to the OAuth 2.0 token endpoint for an access token.
-    Args:
-        request (Request): The Request object to use.
-        headers (Mapping[str, str]): Map of headers to transmit.
-        body (Mapping[str, str]): JSON Payload body for the iamcredentials
-            API call.
-
-    Raises:
-        google.auth.exceptions.RefreshError: Raised if the domain-wide delegation
-            credentials are not available.  Common reasons are
-            `domain-wide delegation` is not setup or the
-            `targeted_scopes` are not allowed
-
-    Returns:
-        Tuple[str, datetime]:  Requested access token and its expiry timestamp
-    """
-    token_uri = _DEFAULT_TOKEN_URI
-
-    response = request(url=token_uri, method="POST", headers=headers, body=body)
-
-    # support both string and bytes type response.data
-    response_body = (
-        response.data.decode("utf-8")
-        if hasattr(response.data, "decode")
-        else response.data
-    )
-
-    if response.status != http_client.OK:
-        raise exceptions.RefreshError(_DWD_ERROR, response_body)
-
-    try:
-        token_response = json.loads(response_body)
-        token = token_response["access_token"]
-
-        lifetime = timedelta(seconds=token_response["expires_in"])
-        expiry = _helpers.utcnow() + lifetime
-
-        return token, expiry
-
-    except (KeyError, ValueError, TypeError) as caught_exc:
-        new_exc = exceptions.RefreshError(
-            "{}: No access token or invalid expiration in response.".format(_DWD_ERROR),
-            response_body,
-        )
-        raise new_exc from caught_exc
 
 
 class Credentials(ImpersonatedCredentials):
@@ -301,22 +251,22 @@ class Credentials(ImpersonatedCredentials):
         # Apply the source credentials authentication info.
         self._source_credentials.apply(headers)
 
-        signed_jwt = _make_iam_sign_request(
+        assertion = _make_iam_sign_request(
+            request=request,
             principal=self.service_account_email,
             headers=headers,
             body=body,
             iam_sign_endpoint_override=self._iam_sign_endpoint_override,
         )
 
-        body = {"grant_type": _TOKEN_OAUTH_GRANT, "assertion": signed_jwt}
-
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-        self.token, self.expiry = _make_token_request(
-            request=request,
-            headers=headers,
-            body=body,
-        )
+        try:
+            access_token, expiry, _ = _client.jwt_grant(
+                request, _DEFAULT_TOKEN_URI, assertion
+            )
+            self.token = access_token
+            self.expiry = expiry
+        except Exception as e:
+            raise exceptions.RefreshError("{}: {}".format(_DWD_ERROR, e))
 
     def _get_assertion_payload(self) -> Dict[str, Any]:
         """Create an the OAuth 2.0 assertion payload.
