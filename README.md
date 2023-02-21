@@ -85,7 +85,7 @@ delegated_credentials = dwd_credentials.Credentials(
 )
 ```
 
-Finally you can switch delegated credentials as defined below:
+Finally, you can switch delegated credentials as defined below:
 
 ```python
 alice_delegated_creds = dwd_credentials.Credentials(
