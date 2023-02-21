@@ -3,6 +3,7 @@ Google Auth Plugins Python Library
 
 <!--- @begin-badges@ --->
 ![CI](https://github.com/LoicSikidi/google-auth-plugins-library-python/workflows/CI/badge.svg)
+[![PyPI version](https://badge.fury.io/py/google-auth-plugins.svg)](https://pypi.org/project/google-auth-plugins)
 <!--- @end-badges@ --->
 
 This library (built on top of [Google's official SDK](https://github.com/googleapis/google-auth-library-python)) aims to provide features not implemented by the standard library for whatever reason.
@@ -34,6 +35,7 @@ As an example, the version [2.16.1](https://github.com/googleapis/google-auth-li
 `google-auth-plugins` requires Python 3.7 or newer, and can be installed directly via `pip`:
 
 ```console
+python3 -m venv venv && source venv/bin/activate
 python -m pip install google-auth-plugins
 ```
 
