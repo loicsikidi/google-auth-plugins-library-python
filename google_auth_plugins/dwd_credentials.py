@@ -221,6 +221,11 @@ class Credentials(ImpersonatedCredentials):
             if hasattr(source_credentials, "service_account_email")
             else None
         )
+
+        # [INFO] Manage compute_engine.Credentials default service_account_email value
+        if dwd_principal == "default":
+            source_credentials.refresh(Request())
+
         super().__init__(
             source_credentials=source_credentials,
             target_principal=dwd_principal,
