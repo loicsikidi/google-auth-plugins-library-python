@@ -91,8 +91,7 @@ class TestDwdCredentials(object):
     TARGET_PRINCIPAL = "dwd@project.iam.gserviceaccount.com"
     TARGET_SCOPES = ["https://www.googleapis.com/auth/admin.directory.group.readonly"]
     SUBJECT = "john.doe@example.com"
-    # DELEGATES: List[str] = []
-    # Because Python 2.7:
+
     DELEGATES = []  # type: ignore
     SOURCE_CREDENTIALS = service_account.Credentials(
         SIGNER, SERVICE_ACCOUNT_EMAIL, TOKEN_URI
@@ -130,6 +129,24 @@ class TestDwdCredentials(object):
         credentials = self.make_credentials()
         assert not credentials.valid
         assert credentials.expired
+
+    @pytest.mark.parametrize(
+        "source_service_account_email", [SERVICE_ACCOUNT_EMAIL, "default"]
+    )
+    def test_target_service_account_email(self, source_service_account_email):
+        mock_source_credentials = mock.MagicMock()
+        p = mock.PropertyMock(return_value=source_service_account_email)
+        type(mock_source_credentials).service_account_email = p
+        mock_source_credentials.refresh = mock.MagicMock()
+
+        self.make_credentials(
+            source_credentials=mock_source_credentials, target_principal=None
+        )
+
+        if source_service_account_email == "default":
+            mock_source_credentials.refresh.assert_called_once()
+        else:
+            mock_source_credentials.refresh.assert_not_called()
 
     def make_response_mock(
         self, data, status=http_client.OK, headers=None, use_data_bytes=True
