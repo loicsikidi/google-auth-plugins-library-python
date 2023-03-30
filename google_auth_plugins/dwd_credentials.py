@@ -216,15 +216,18 @@ class Credentials(ImpersonatedCredentials):
         Raises:
             ValueError: Raised if target_principal hasn't been found.
         """
+        # [INFO] Manage compute_engine.Credentials default service_account_email value
+        if (
+            hasattr(source_credentials, "service_account_email")
+            and source_credentials.service_account_email == "default"
+        ):
+            source_credentials.refresh(Request())
+
         dwd_principal = target_principal or (
             source_credentials.service_account_email
             if hasattr(source_credentials, "service_account_email")
             else None
         )
-
-        # [INFO] Manage compute_engine.Credentials default service_account_email value
-        if dwd_principal == "default":
-            source_credentials.refresh(Request())
 
         super().__init__(
             source_credentials=source_credentials,
