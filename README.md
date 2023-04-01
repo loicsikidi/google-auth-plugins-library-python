@@ -10,7 +10,7 @@ This library (built on top of [Google's official SDK](https://github.com/googlea
 
 Common reason is that the latter is not a priority in the SDK's roadmap.
 
-⚠️ **This project doesn't want or plan to replace the official SDK but rather to be a space for experimentation providing beta features (*because security does have to wait*).**
+⚠️ **This project doesn't want or plan to replace the official SDK but rather to be a space for experimentation providing beta features (*because security doesn't have to wait*).**
 
 I hope that the features available in this repo will be integrated in the official library for the common good.
 
